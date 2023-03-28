@@ -146,7 +146,7 @@ void post_probing (int sockfd, bool comp) {
 
 int main(int argc, char** argv) {
      if (argc < 2){
-        perror("Please include the name of the config file");
+        perror("Please include the TCP port number, check config.json\n");
         printf("Usage: ./server <TCP Port>\n");
     }
 
