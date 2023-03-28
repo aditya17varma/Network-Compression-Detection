@@ -59,9 +59,7 @@ cJSON.c and cJSON.h need to included in the project directory.
 
 ## Recommended Modules
 
-## Installation
-
-## Configuration
-
-## Troubleshooting
+## External Resources Used
+P.D. Buchanan's [Sending a IPv4 TCP packet via raw sockets](https://www.pdbuchan.com/rawsock/tcp4.c)<br>
+Used for implementing the checksum and headers in part2.
 
