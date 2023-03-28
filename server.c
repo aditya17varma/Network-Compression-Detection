@@ -214,6 +214,7 @@ int main(int argc, char** argv) {
     
     // Parse JSON for other info
     struct config_struct *config = parse_JSON();
+    int inter_mes = config->Inter_Measurement_Time;
     // printf("Server sent file successfully!\n");
     printf("Server closing connection..\n");
     sleep(inter_mes / 2);
@@ -224,7 +225,7 @@ int main(int argc, char** argv) {
     int num_packets = config->Number_UDP_Packets;
     int udp_ttl = config->UDP_TTL;
     in_addr_t server_ip = config->Server_IP;
-    int inter_mes = config->Inter_Measurement_Time;
+    
 
 
     // Setup UDP
