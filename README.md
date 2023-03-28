@@ -1,5 +1,8 @@
 # Network Programming - Project1
 
+Project to build a network application to detect if network compression is present on a network path, and if found, to locate the compression link.
+
+
 ## Build
 ### Build using makefile:
 Make all files (client, server, and raw_client):<br>
