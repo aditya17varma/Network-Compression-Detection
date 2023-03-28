@@ -27,10 +27,10 @@ $(inter)/cJSON.o: | $(inter)
 	$(CC) $(CFLAGS) -c cJSON.c -o $(inter)/cJOSN.o
 
 $(target):
-	mkdir $@
+	mkdir -p $@
 
 $(bin):
-	mkdir $@
+	mkdir -p $@
 
 .PHONY: clean
 
