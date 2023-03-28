@@ -155,6 +155,7 @@ int main(int argc, char** argv) {
     }
 
     char *filename = argv[1];
+    // printf("filename: %s\n", argv[1]);
 
     struct config_struct *config = parse_JSON(argv[1]);
     in_addr_t server_ip = config->Server_IP;
@@ -173,7 +174,6 @@ int main(int argc, char** argv) {
     int sockfd, connfd, udp_sockfd;
     struct sockaddr_in servaddr, udp_servaddr;
     FILE *fp;
-    // char *filename = "../config.json";
 
     //TCP socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
 
     close(sockfd);
 
-    sleep(5);
+    sleep(inter_mes * 0.75);
 
     servaddr.sin_port = htons(udp_dest_port);
     // printf("UDP port: %d\n", servaddr.sin_port);
@@ -329,7 +329,7 @@ int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_pac
         char payload[payload_size - 2];
     };
     struct udp_payload udp_packet;
-    FILE *random_fp = fopen("../random_file.txt", "r");
+    FILE *random_fp = fopen("random_file.txt", "r");
     char rand_buffer[payload_size];
     // printf("Trying to fgets random file\n");
     fgets(rand_buffer, sizeof(rand_buffer), random_fp);

@@ -487,7 +487,7 @@ int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_pac
       char payload[payload_size - 2];
   };
   struct udp_payload udp_packet;
-  FILE *random_fp = fopen("../random_file.txt", "r");
+  FILE *random_fp = fopen("random_file.txt", "r");
   char rand_buffer[payload_size];
   // printf("Trying to fgets random file\n");
   fgets(rand_buffer, sizeof(rand_buffer), random_fp);
