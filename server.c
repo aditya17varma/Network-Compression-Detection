@@ -216,7 +216,7 @@ int main(int argc, char** argv) {
     struct config_struct *config = parse_JSON();
     // printf("Server sent file successfully!\n");
     printf("Server closing connection..\n");
-    sleep(2);
+    sleep(inter_mes / 2);
     close(sockfd);
 
     int udp_dest_port = config->Dest_UDP_Port;

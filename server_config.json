@@ -1,0 +1,15 @@
+{
+    "Server_IP": "192.168.64.2",
+    "Client_IP": "192.168.64.3",
+    "Source_UDP_Port": 3000,
+    "Dest_UDP_Port": 8765,
+    "Dest_Port_TCP_Head_SYN": 8080,
+    "Dest_Port_TCP_Tail_SYN": 8081,
+    "TCP_Port": 2000,
+    "UDP_Payload_Size": 1000,
+    "Inter_Measurement_Time": 15,
+    "Number_UDP_Packets": 6000,
+    "UDP_TTL": 255
+}
+
+
