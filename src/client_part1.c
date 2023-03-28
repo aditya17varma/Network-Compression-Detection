@@ -181,9 +181,9 @@ int main(int argc, char** argv) {
         perror("TCP Client socket creation failed...");
         exit(1);
     }
-    // else {
-    //     printf("TCP Client socket created...\n");
-    // }
+    else {
+        printf("TCP Client socket created...\n");
+    }
 
     //UDP socket
     udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -191,18 +191,18 @@ int main(int argc, char** argv) {
         perror("UDP Client socket error");
         exit(1);
     }
-    // else {
-    //     printf("UDP Client socket created\n");
-    // }
+    else {
+        printf("UDP Client socket created\n");
+    }
 
     int df_val = IP_PMTUDISC_DO;
     if (setsockopt(udp_sockfd, IPPROTO_IP, IP_MTU_DISCOVER, &df_val, sizeof(df_val)) < 0){
         perror("UDP setsockopt failed");
         exit(1);
     }
-    // else {
-    //     printf("UDP setsockopt successful!\n");
-    // }
+    else {
+        printf("UDP setsockopt successful!\n");
+    }
 
     
     // bzero(&servaddr, sizeof(servaddr));
@@ -221,9 +221,9 @@ int main(int argc, char** argv) {
         printf("Client connection to server socket failed...\n");
         exit(1);
     }
-    // else {
-    //     printf("Client connected successfully to Server socket\n");
-    // }
+    else {
+        printf("Client connected successfully to Server socket\n");
+    }
     fp = fopen(filename, "r");
     if (fp == NULL) {
         perror("Client error in reading file");
@@ -308,13 +308,13 @@ int main(int argc, char** argv) {
         exit(1);
     }
     else {
-        printf("%s\n", buffer);
+        printf("\n%s\n", buffer);
         bzero(buffer, MAX);
     }
     
 
 
-    // printf("TCP post-probing done!\n");
+    printf("TCP post-probing done!\n");
     // printf("Client closing connection..\n");
 
     close(sockfd);
@@ -324,31 +324,33 @@ int main(int argc, char** argv) {
 }
 
 int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_packets, int payload_size, bool high_entropy) {
-  struct udp_payload{
-      unsigned short packet_id;
-      char payload[payload_size - 2];
-  };
-  struct udp_payload udp_packet;
-  FILE *random_fp = fopen("../random_file.txt", "r");
-  char rand_buffer[payload_size];
-  // printf("Trying to fgets random file\n");
-  fgets(rand_buffer, sizeof(rand_buffer), random_fp);
-  // printf("Rand array filled\n");
+    struct udp_payload{
+        unsigned short packet_id;
+        char payload[payload_size - 2];
+    };
+    struct udp_payload udp_packet;
+    FILE *random_fp = fopen("../random_file.txt", "r");
+    char rand_buffer[payload_size];
+    // printf("Trying to fgets random file\n");
+    fgets(rand_buffer, sizeof(rand_buffer), random_fp);
+    // printf("Rand array filled\n");
 
-  for (int i = 0; i < num_packets; i++){
-      // set packet id
-      udp_packet.packet_id = (unsigned short)i;
-      // clear packet payload
-      memset(udp_packet.payload, 0, payload_size -2);
-      if (high_entropy){
+    memset(udp_packet.payload, 0, payload_size -2);
+    if (high_entropy){
         strncpy(udp_packet.payload, rand_buffer, payload_size - 2);
-      }
-      if (sendto(udp_sockfd, &udp_packet, sizeof(udp_packet), 0, (struct sockaddr*)&udp_servaddr, sizeof(udp_servaddr)) == -1) {
-          perror("UDP Sendto error");
-          printf("%s\n", strerror(errno));
-      }
-  }
-  // printf("Sent train!\n");
-  return 1;
+    }
+
+    for (int i = 0; i < num_packets; i++){
+        // set packet id
+        udp_packet.packet_id = (unsigned short)i;
+        // clear packet payload
+        
+        if (sendto(udp_sockfd, &udp_packet, sizeof(udp_packet), 0, (struct sockaddr*)&udp_servaddr, sizeof(udp_servaddr)) == -1) {
+            perror("UDP Sendto error");
+            printf("%s\n", strerror(errno));
+        }
+    }
+    // printf("Sent train!\n");
+    return 1;
 }
 

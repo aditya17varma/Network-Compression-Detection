@@ -41,8 +41,11 @@ int send_udp_trains(int, struct sockaddr_in, int, int, bool);
 long double receive_rst(int, struct sockaddr_in, int, int, int);
 void* thread_function (void *);
 
+void print_packet(char*);
+
 struct config_struct {
     in_addr_t Server_IP;
+    in_addr_t Client_IP;
     int Source_UDP_Port;
     int Dest_UDP_Port;
     int Dest_Port_TCP_Head_SYN;
@@ -91,6 +94,13 @@ struct config_struct* parse_JSON(char *filename) {
     }
     else {
         printf("Shouldn't get here\n");
+    }
+
+    cJSON *Client_IP = cJSON_GetObjectItem(root, "Client_IP");
+    if (cJSON_IsString(Client_IP)) {
+        // printf("Client IP: %s\n", Client_IP->valuestring);
+        config->Client_IP = inet_addr(Client_IP->valuestring);
+        // printf("Client IP struct: %d\n", config->Client_IP);
     }
 
     cJSON *Source_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Source_UDP_Port");
@@ -164,13 +174,15 @@ int main (int argc, char **argv) {
 
   int status, sockfd, udp_sockfd;
   char *src_ip, *dst_ip;
-  // struct addrinfo hints, *res;
+
   struct sockaddr_in *ipv4, servaddr, udp_servaddr;
   struct ifreq ifr;
   void *tmp;
 
+  // LOAD CONFIG DATA
   struct config_struct *config = parse_JSON(argv[1]);
   in_addr_t server_ip = config->Server_IP;
+  in_addr_t client_ip = config->Client_IP;
   int tcp_port = config->TCP_Port;
   int udp_dest_port = config->Dest_UDP_Port;
   int payload_size = config->UDP_Payload_Size;
@@ -179,29 +191,22 @@ int main (int argc, char **argv) {
   int inter_mes = config->Inter_Measurement_Time;
   int tcp_head = config->Dest_Port_TCP_Head_SYN;
   int tcp_tail = config->Dest_Port_TCP_Tail_SYN;
+  int source_udp_port = config->Source_UDP_Port;
 
-  // Allocate memory for various arrays.
-  src_ip = allocate_strmem (INET_ADDRSTRLEN);
-  
-
-  // Source IPv4 address: you need to fill this out
-  strcpy (src_ip, "192.168.64.3");
-  // printf("src_ip: %s\n", src_ip);
 
   int source_port = tcp_port;
   int dest_port = tcp_head;
   int dest_port2 = tcp_tail;
   int recvfrom_timeout = inter_mes * 0.75;
-  // printf("Inter Mes: %d Timeout: %d\n", inter_mes, recvfrom_timeout);
 
   pthread_t recv_thread;
 
   struct in_addr dest_addr;
   dest_addr.s_addr = server_ip;
+  struct in_addr src_addr;
+  src_addr.s_addr = client_ip;
   dst_ip = inet_ntoa(dest_addr);
-  // struct in_addr src_addr;
-  // src_addr.s_addr = INADDR_ANY;
-  // printf("src_ip: %s, ntoa_ip: %s\n", src_ip, inet_ntoa(src_addr));
+  src_ip = inet_ntoa(src_addr);
 
   //RAW SERVADDR
   memset (&servaddr, 0, sizeof (struct sockaddr_in));
@@ -213,9 +218,11 @@ int main (int argc, char **argv) {
   memset(&udp_servaddr, 0, sizeof(udp_servaddr));
   udp_servaddr.sin_family = AF_INET;
   udp_servaddr.sin_addr.s_addr = inet_addr(dst_ip);
-  udp_servaddr.sin_port = htons(9998);
+  udp_servaddr.sin_port = htons(source_udp_port);
   // printf("Client UDP IP: %d\n", server_ip);
+  printf("Sockaddr set up for TCP and UDP.\n");
 
+  printf("Setting up TCP and UDP sockets...\n");
   sockfd = setup_raw_tcp_socket(recvfrom_timeout);
   udp_sockfd = setup_udp_socket(udp_ttl);
 
@@ -230,12 +237,13 @@ int main (int argc, char **argv) {
   };
 
   // TRAIN 1
-  // printf("Strating recvfrom thread...\n");
+  printf("Sending Trains...\n");
   pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data);
   // printf("Called pthread_create\n");
 
   bool high_entropy = false;
 
+  // printf("Starting Train 1...\n");
   //HEAD SYN
   int s = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port);
   if (s < 0){
@@ -258,7 +266,6 @@ int main (int argc, char **argv) {
   }
 
   pthread_join(recv_thread, NULL);
-  // printf("Thread exited and returned: %Lf\n", thrd_data.rst_delta);
   
   // Close socket descriptor.
   close (sockfd);
@@ -279,12 +286,13 @@ int main (int argc, char **argv) {
     .dest_port2 = dest_port2
   };
 
-  // printf("Strating recvfrom thread...\n");
+  // printf("Sending Trains...\n");
   pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data2);
   // printf("Called pthread_create\n");
 
   high_entropy = true;
 
+  // printf("Starting Train 2...\n");
   //HEAD SYN
   s = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port);
   if (s != 1){
@@ -312,12 +320,16 @@ int main (int argc, char **argv) {
   // Close socket descriptor.
   close (sockfd);
 
-  printf("Delta1: %Lf\n", thrd_data.rst_delta);
-  printf("Delta2: %Lf\n", thrd_data2.rst_delta);
-  printf("Total Delta: %d\n", abs(thrd_data2.rst_delta - thrd_data.rst_delta));
-
-
-  free (src_ip);
+  printf("RST Delta for Train1: %Lf\n", thrd_data.rst_delta);
+  printf("RST Delta for Train2: %Lf\n", thrd_data2.rst_delta);
+  double total_delta = abs(thrd_data2.rst_delta - thrd_data.rst_delta);
+  printf("Total Delta: %f\n", total_delta);
+  if (total_delta < 100){
+    printf("\nNo Compression!!\n");
+  }
+  else {
+    printf("\nCompression Detected!!\n");
+  }
 
   return (EXIT_SUCCESS);
 }
@@ -331,7 +343,7 @@ int setup_raw_tcp_socket(int recv_timeout) {
     exit (EXIT_FAILURE);
   }
   // else{
-  //   printf("Socket created\n");
+  //   printf("TCP Socket created\n");
   // }
 
   // Set flag so socket expects us to provide IPv4 header.
@@ -460,9 +472,6 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
     perror ("sendto() failed ");
     exit (EXIT_FAILURE);
   }
-  // else {
-  //   printf("Packet sent\n");
-  // }
 
   free (packet);
   free (ip_flags);
@@ -519,7 +528,7 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
         exit(1);
       }
     }
-    unsigned char *recv_packet = &recv_buffer;
+    unsigned char *recv_packet = (unsigned char*)&recv_buffer;
     struct iphdr *ip_recv = (struct iphdr*)recv_packet;
     struct tcphdr *tcp_recv = (struct tcphdr*)(recv_packet + ip_recv->ihl*4);
     int tcp_recv_destport = tcp_recv->th_dport;
@@ -571,8 +580,6 @@ void* thread_function (void *arg) {
   // return (void *)rst_delta;
 }
 
-// Computing the internet checksum (RFC 1071).
-// Note that the internet checksum is not guaranteed to preclude collisions.
 uint16_t
 checksum (uint16_t *addr, int len) {
 

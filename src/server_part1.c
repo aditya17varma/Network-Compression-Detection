@@ -164,9 +164,9 @@ int main(int argc, char** argv) {
         perror("Server error in creating socket...");
         exit(1);
     }
-    // else {
-    //     printf("Server socket creation successful\n");
-    // }
+    else {
+        printf("Server TCP socket creation successful\n");
+    }
 
     //TCP setsock opt reuse addr and reuse port
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0){
@@ -191,9 +191,9 @@ int main(int argc, char** argv) {
     if (bindfd == -1){
         perror("Server bind failed");
     }
-    // else {
-    //     printf("Server socket bind successful!\n");
-    // }
+    else {
+        printf("Server TCP socket bind successful!\n");
+    }
     
 
     if (listen(sockfd, 10) < 0) {
@@ -201,9 +201,9 @@ int main(int argc, char** argv) {
         exit(1);
        
     }
-    // else {
-    //      printf("Server listening...\n");
-    // }
+    else {
+         printf("Server listening...\n");
+    }
 
     addr_size = sizeof(new_addr);
     new_sock = accept(sockfd, (struct sockaddr*)&new_addr, &addr_size);
@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
     // Parse JSON for other info
     struct config_struct *config = parse_JSON();
     // printf("Server sent file successfully!\n");
-    // printf("Server closing connection..\n");
+    printf("Server closing connection..\n");
     sleep(2);
     close(sockfd);
 
@@ -233,9 +233,9 @@ int main(int argc, char** argv) {
         perror("UDP Server socket error");
         exit(1);
     }
-    // else {
-    //     printf("UDP Server socket created\n");
-    // }
+    else {
+        printf("UDP Server socket created\n");
+    }
     memset(&udp_server_addr, '\0', sizeof(udp_server_addr));
     udp_server_addr.sin_family = AF_INET;
     udp_server_addr.sin_port = htons(udp_dest_port);
@@ -339,18 +339,18 @@ int main(int argc, char** argv) {
     // printf("Train 0: %d\n", train0_packets);
     // printf("Train 1: %d\n", train1_packets);
 
-    // printf("Low start: %ld\n", low_start.tv_sec);
-    // printf("Low ends: %ld\n", low_end.tv_sec);
+    printf("\nLow start: %ld\n", low_start.tv_sec);
+    printf("Low ends: %ld\n", low_end.tv_sec);
     long double low_diff = (low_end.tv_sec*1000 + low_end.tv_usec/1000) - (low_start.tv_sec*1000 + low_start.tv_usec/1000);
-    // printf("Low Diff: %Lf\n", low_diff);
-    // printf("High start: %ld\n", high_start.tv_sec);
-    // printf("High end: %ld\n", high_end.tv_sec);
+    printf("Low Delta: %Lf\n", low_diff);
+    printf("\nHigh start: %ld\n", high_start.tv_sec);
+    printf("High end: %ld\n", high_end.tv_sec);
     long double high_diff =  (high_end.tv_sec*1000  + high_end.tv_usec/1000) - (high_start.tv_sec*1000 - high_start.tv_usec/1000);
-    // printf("High Diff: %Lf\n", high_diff);
+    printf("High Delta: %Lf\n", high_diff);
 
-    long double difference = abs(high_diff - low_diff);
+    long double difference = high_diff - low_diff;
     
-    printf("Difference between high and low: %Lf\n", difference);
+    printf("\nDifference between high and low Deltas: %Lfms\n", difference);
     bool compression = false;
     if (difference < 100){
         printf("No Compression!\n");
