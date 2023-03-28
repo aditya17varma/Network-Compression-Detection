@@ -41,8 +41,11 @@ int send_udp_trains(int, struct sockaddr_in, int, int, bool);
 long double receive_rst(int, struct sockaddr_in, int, int, int);
 void* thread_function (void *);
 
+void print_packet(char*);
+
 struct config_struct {
     in_addr_t Server_IP;
+    in_addr_t Client_IP;
     int Source_UDP_Port;
     int Dest_UDP_Port;
     int Dest_Port_TCP_Head_SYN;
@@ -63,11 +66,11 @@ struct thread_data {
     long double rst_delta;
 };
 
-struct config_struct* parse_JSON() {
+struct config_struct* parse_JSON(char *filename) {
 
     struct config_struct *config = malloc(sizeof(struct config_struct));
 
-    FILE *fp = fopen("../config.json", "r");
+    FILE *fp = fopen(filename, "r");
 
     char buffer[1024];
     fread(buffer, 1, 1024, fp);
@@ -91,6 +94,13 @@ struct config_struct* parse_JSON() {
     }
     else {
         printf("Shouldn't get here\n");
+    }
+
+    cJSON *Client_IP = cJSON_GetObjectItem(root, "Client_IP");
+    if (cJSON_IsString(Client_IP)) {
+        // printf("Client IP: %s\n", Client_IP->valuestring);
+        config->Client_IP = inet_addr(Client_IP->valuestring);
+        // printf("Client IP struct: %d\n", config->Client_IP);
     }
 
     cJSON *Source_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Source_UDP_Port");
@@ -153,15 +163,26 @@ struct config_struct* parse_JSON() {
 
 
 int main (int argc, char **argv) {
+  // CHANGE SRC_IP HARDCODE, MAYBE PUT INTO CONFIG FILE
+
+  if (argc < 2){
+    perror("Please include the name of the config file");
+    printf("Usage: ./raw_client <config.json>\n");
+  }
+
+  char *filename = argv[1];
+
   int status, sockfd, udp_sockfd;
   char *src_ip, *dst_ip;
-  // struct addrinfo hints, *res;
+
   struct sockaddr_in *ipv4, servaddr, udp_servaddr;
   struct ifreq ifr;
   void *tmp;
 
-  struct config_struct *config = parse_JSON();
+  // LOAD CONFIG DATA
+  struct config_struct *config = parse_JSON(argv[1]);
   in_addr_t server_ip = config->Server_IP;
+  in_addr_t client_ip = config->Client_IP;
   int tcp_port = config->TCP_Port;
   int udp_dest_port = config->Dest_UDP_Port;
   int payload_size = config->UDP_Payload_Size;
@@ -170,30 +191,22 @@ int main (int argc, char **argv) {
   int inter_mes = config->Inter_Measurement_Time;
   int tcp_head = config->Dest_Port_TCP_Head_SYN;
   int tcp_tail = config->Dest_Port_TCP_Tail_SYN;
-  printf("Config num_packets: %d\n", num_packets);
+  int source_udp_port = config->Source_UDP_Port;
 
-  // Allocate memory for various arrays.
-  src_ip = allocate_strmem (INET_ADDRSTRLEN);
-  
-
-  // Source IPv4 address: you need to fill this out
-  strcpy (src_ip, "192.168.64.3");
-  printf("src_ip: %s\n", src_ip);
 
   int source_port = tcp_port;
   int dest_port = tcp_head;
   int dest_port2 = tcp_tail;
   int recvfrom_timeout = inter_mes * 0.75;
-  printf("Inter Mes: %d Timeout: %d\n", inter_mes, recvfrom_timeout);
 
   pthread_t recv_thread;
 
   struct in_addr dest_addr;
   dest_addr.s_addr = server_ip;
+  struct in_addr src_addr;
+  src_addr.s_addr = client_ip;
   dst_ip = inet_ntoa(dest_addr);
-  // struct in_addr src_addr;
-  // src_addr.s_addr = INADDR_ANY;
-  // printf("src_ip: %s, ntoa_ip: %s\n", src_ip, inet_ntoa(src_addr));
+  src_ip = inet_ntoa(src_addr);
 
   //RAW SERVADDR
   memset (&servaddr, 0, sizeof (struct sockaddr_in));
@@ -205,9 +218,11 @@ int main (int argc, char **argv) {
   memset(&udp_servaddr, 0, sizeof(udp_servaddr));
   udp_servaddr.sin_family = AF_INET;
   udp_servaddr.sin_addr.s_addr = inet_addr(dst_ip);
-  udp_servaddr.sin_port = htons(9999);
-  printf("Client UDP IP: %d\n", server_ip);
+  udp_servaddr.sin_port = htons(source_udp_port);
+  // printf("Client UDP IP: %d\n", server_ip);
+  printf("Sockaddr set up for TCP and UDP.\n");
 
+  printf("Setting up TCP and UDP sockets...\n");
   sockfd = setup_raw_tcp_socket(recvfrom_timeout);
   udp_sockfd = setup_udp_socket(udp_ttl);
 
@@ -222,18 +237,16 @@ int main (int argc, char **argv) {
   };
 
   // TRAIN 1
-  printf("Strating recvfrom thread...\n");
+  printf("Sending Trains...\n");
   pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data);
-  printf("Called pthread_create\n");
+  // printf("Called pthread_create\n");
 
   bool high_entropy = false;
 
+  // printf("Starting Train 1...\n");
   //HEAD SYN
   int s = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port);
-  if (s == 1){
-    printf("Send_syn worked %d\n", dest_port);
-  }
-  else {
+  if (s < 0){
     perror("Send_syn");
   }
 
@@ -248,15 +261,11 @@ int main (int argc, char **argv) {
 
   //TAIL SYN
   int s2 = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port2);
-  if (s2 == 1){
-    printf("Send_syn worked %d\n", dest_port2);
-  }
-  else {
+  if (s2 < 0){
     perror("Send_syn");
   }
 
   pthread_join(recv_thread, NULL);
-  printf("Thread exited and returned: %Lf\n", thrd_data.rst_delta);
   
   // Close socket descriptor.
   close (sockfd);
@@ -277,18 +286,16 @@ int main (int argc, char **argv) {
     .dest_port2 = dest_port2
   };
 
-  printf("Strating recvfrom thread...\n");
+  // printf("Sending Trains...\n");
   pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data2);
-  printf("Called pthread_create\n");
+  // printf("Called pthread_create\n");
 
   high_entropy = true;
 
+  // printf("Starting Train 2...\n");
   //HEAD SYN
   s = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port);
-  if (s == 1){
-    printf("Send_syn worked %d\n", dest_port);
-  }
-  else {
+  if (s != 1){
     perror("Send_syn");
   }
 
@@ -303,25 +310,26 @@ int main (int argc, char **argv) {
 
   //TAIL SYN
   s2 = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port2);
-  if (s2 == 1){
-    printf("Send_syn worked %d\n", dest_port2);
-  }
-  else {
+  if (s2 < 0){
     perror("Send_syn");
   }
 
   pthread_join(recv_thread, NULL);
-  printf("Thread exited and returned: %Lf\n", thrd_data2.rst_delta);
+  // printf("Thread exited and returned: %Lf\n", thrd_data2.rst_delta);
   
   // Close socket descriptor.
   close (sockfd);
 
-  printf("Delta1: %Lf\n", thrd_data.rst_delta);
-  printf("Delta2: %Lf\n", thrd_data2.rst_delta);
-  printf("Total Delta: %d\n", abs(thrd_data2.rst_delta - thrd_data.rst_delta));
-
-
-  free (src_ip);
+  printf("RST Delta for Train1: %Lf\n", thrd_data.rst_delta);
+  printf("RST Delta for Train2: %Lf\n", thrd_data2.rst_delta);
+  double total_delta = abs(thrd_data2.rst_delta - thrd_data.rst_delta);
+  printf("Total Delta: %f\n", total_delta);
+  if (total_delta < 100){
+    printf("\nNo Compression!!\n");
+  }
+  else {
+    printf("\nCompression Detected!!\n");
+  }
 
   return (EXIT_SUCCESS);
 }
@@ -331,12 +339,12 @@ int setup_raw_tcp_socket(int recv_timeout) {
   int sockfd;
   if ((sockfd = socket (AF_INET, SOCK_RAW, IPPROTO_TCP)) < 0) {
     perror ("socket() failed ");
-    printf("%s\n",strerror(errno));
+    // printf("%s\n",strerror(errno));
     exit (EXIT_FAILURE);
   }
-  else{
-    printf("Socket created\n");
-  }
+  // else{
+  //   printf("TCP Socket created\n");
+  // }
 
   // Set flag so socket expects us to provide IPv4 header.
   const int on = 1;
@@ -352,9 +360,9 @@ int setup_raw_tcp_socket(int recv_timeout) {
     perror("Couldn't set RCV Timeout");
     exit(1);
   }
-  else {
-    printf("Recvfrom timeout set to: %ld\n", timeout.tv_sec);
-  }
+  // else {
+  //   printf("Recvfrom timeout set to: %ld\n", timeout.tv_sec);
+  // }
 
   return sockfd;
 
@@ -366,9 +374,9 @@ int setup_udp_socket(int udp_ttl){
       perror("UDP Client socket error");
       exit(1);
   }
-  else {
-      printf("UDP Client socket created\n");
-  }
+  // else {
+  //     printf("UDP Client socket created\n");
+  // }
 
   int df_val = IP_PMTUDISC_DO;
   if (setsockopt(udp_sockfd, IPPROTO_IP, IP_MTU_DISCOVER, &df_val, sizeof(df_val)) < 0){
@@ -396,9 +404,9 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
   
   // IPv4 header
   iphdr.ip_hl = IP4_HDRLEN / sizeof (uint32_t); // IPv4 header length (4 bits): Number of 32-bit words in header = 5
-  iphdr.ip_v = 4; // Internet Protocol version (4 bits): IPv4
+  iphdr.ip_v = 4; // IPv4 (4 bits)
   iphdr.ip_tos = 0; // Type of service (8 bits)
-  iphdr.ip_len = htons (IP4_HDRLEN + TCP_HDRLEN); // Total length of datagram (16 bits): IP header + TCP header  
+  iphdr.ip_len = htons (IP4_HDRLEN + TCP_HDRLEN); // Length of datagram (16 bits): IP header + TCP header  
   iphdr.ip_id = htons (0); // ID sequence number (16 bits): unused, since single datagram
   // Flags, and Fragmentation offset (3, 13 bits): 0 since single datagram
   ip_flags[0] = 0; // Zero (1 bit)
@@ -417,7 +425,7 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
     fprintf (stderr, "inet_pton() failed for source address.\nError message: %s", strerror (status));
     exit (EXIT_FAILURE);
   }
-  printf("iphdr src_ip: %d\n", iphdr.ip_src.s_addr);
+  // printf("iphdr src_ip: %d\n", iphdr.ip_src.s_addr);
 
   // Destination IPv4 address (32 bits)
   if ((status = inet_pton (AF_INET, dest_ip, &(iphdr.ip_dst))) != 1) {
@@ -464,9 +472,6 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
     perror ("sendto() failed ");
     exit (EXIT_FAILURE);
   }
-  else {
-    printf("Packet sent\n");
-  }
 
   free (packet);
   free (ip_flags);
@@ -484,9 +489,9 @@ int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_pac
   struct udp_payload udp_packet;
   FILE *random_fp = fopen("../random_file.txt", "r");
   char rand_buffer[payload_size];
-  printf("Trying to fgets random file\n");
+  // printf("Trying to fgets random file\n");
   fgets(rand_buffer, sizeof(rand_buffer), random_fp);
-  printf("Rand array filled\n");
+  // printf("Rand array filled\n");
 
   for (int i = 0; i < num_packets; i++){
       // set packet id
@@ -501,7 +506,7 @@ int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_pac
           printf("%s\n", strerror(errno));
       }
   }
-  printf("Sent train!\n");
+  // printf("Sent train!\n");
   return 1;
 }
 
@@ -515,7 +520,7 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
     ssize_t bytes_received = recvfrom(sockfd, recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr *)&servaddr, &addrlen);
     if (bytes_received < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK){
-        printf("RECV timeout\n");
+        // printf("RECV timeout\n");
         break;
       }
       else {
@@ -523,22 +528,22 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
         exit(1);
       }
     }
-    unsigned char *recv_packet = &recv_buffer;
+    unsigned char *recv_packet = (unsigned char*)&recv_buffer;
     struct iphdr *ip_recv = (struct iphdr*)recv_packet;
     struct tcphdr *tcp_recv = (struct tcphdr*)(recv_packet + ip_recv->ihl*4);
     int tcp_recv_destport = tcp_recv->th_dport;
     if (tcp_recv->th_flags & TH_RST){
-      printf("Bytes Captured: %ld\n", bytes_received);
-      printf("RST found\n");
-      printf("Sent to: %d\n", ntohs(tcp_recv->th_dport));
-      printf("Sent from: %d\n", ntohs(tcp_recv->th_sport));
+      // printf("Bytes Captured: %ld\n", bytes_received);
+      // printf("RST found\n");
+      // printf("Sent to: %d\n", ntohs(tcp_recv->th_dport));
+      // printf("Sent from: %d\n", ntohs(tcp_recv->th_sport));
       if (!first_rst_captured){
-        printf("Found first RST\n");
+        // printf("Found first RST\n");
         gettimeofday(&rst_start, NULL);
         first_rst_captured = true;
       }
       else {
-        printf("Found second RST\n");
+        // printf("Found second RST\n");
         gettimeofday(&rst_end, NULL);
         break;
       }
@@ -547,12 +552,12 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
     bzero(recv_buffer, sizeof(recv_buffer));
   }
 
-  printf("RST Start: sec: %ld usec:%ld\n", rst_start.tv_sec, rst_start.tv_usec);
-  printf("RST End: sec: %ld usec:%ld\n", rst_end.tv_sec, rst_end.tv_usec);
+  // printf("RST Start: sec: %ld usec:%ld\n", rst_start.tv_sec, rst_start.tv_usec);
+  // printf("RST End: sec: %ld usec:%ld\n", rst_end.tv_sec, rst_end.tv_usec);
   long double sec_diff = rst_end.tv_sec - rst_start.tv_sec;
-  printf("Sec_diff: %Lf\n", sec_diff);
+  // printf("Sec_diff: %Lf\n", sec_diff);
   long double usec_diff = rst_end.tv_usec - rst_start.tv_usec;
-  printf("uSec_diff: %Lf\n", usec_diff);
+  // printf("uSec_diff: %Lf\n", usec_diff);
   long double rst_delta = ((rst_end.tv_sec - rst_start.tv_sec) * 1000 + (rst_end.tv_usec - rst_start.tv_usec) / 1000) ;
   return rst_delta;
 
@@ -560,10 +565,10 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
 
 void* thread_function (void *arg) {
   struct thread_data *t_data = (struct thread_data *) arg;
-  printf("Check Thread source_port: %d\n", t_data->source_port);
+  // printf("Check Thread source_port: %d\n", t_data->source_port);
   int sockfd = t_data->sockfd;
   struct sockaddr_in servaddr = t_data->servaddr;
-  printf("Checking servaddr ip: %d\n",servaddr.sin_addr.s_addr);
+  // printf("Checking servaddr ip: %d\n",servaddr.sin_addr.s_addr);
   int source_port = t_data->source_port;
   int dest_port = t_data->dest_port;
   int dest_port2 = t_data->dest_port2;
@@ -575,8 +580,6 @@ void* thread_function (void *arg) {
   // return (void *)rst_delta;
 }
 
-// Computing the internet checksum (RFC 1071).
-// Note that the internet checksum is not guaranteed to preclude collisions.
 uint16_t
 checksum (uint16_t *addr, int len) {
 
