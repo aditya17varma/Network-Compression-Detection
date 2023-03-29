@@ -338,7 +338,9 @@ int main (int argc, char **argv) {
   Train 1
   */
   printf("Sending Trains...\n");
-  pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data);
+  if (pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data) < 0){
+    perror("Thread create error");
+  }
   // printf("Called pthread_create\n");
 
   bool high_entropy = false;
@@ -376,7 +378,9 @@ int main (int argc, char **argv) {
     exit(1);
   }
 
-  pthread_join(recv_thread, NULL);
+  if (pthread_join(recv_thread, NULL) < 0){
+    perror("Thread join error");
+  }
   
   // Close socket descriptor.
   close (sockfd);
@@ -388,11 +392,15 @@ int main (int argc, char **argv) {
   /*
   Train 2
   */
-  sockfd = setup_raw_tcp_socket(recvfrom_timeout);
+  int sockfd2 = setup_raw_tcp_socket(recvfrom_timeout);
   udp_sockfd = setup_udp_socket(udp_ttl);
 
+  memset (&servaddr, 0, sizeof (struct sockaddr_in));
+  servaddr.sin_family = AF_INET;
+  servaddr.sin_addr.s_addr = inet_addr(dst_ip);
+
   struct thread_data thrd_data2 = {
-    .sockfd = sockfd,
+    .sockfd = sockfd2,
     .servaddr = servaddr,
     .source_port = source_port,
     .dest_port = dest_port,
@@ -400,16 +408,19 @@ int main (int argc, char **argv) {
   };
 
   // printf("Sending Trains...\n");
-  pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data2);
+  pthread_t recv_thread2;
+  if (pthread_create(&recv_thread2, NULL, thread_function, (void *)&thrd_data2) < 0){
+    perror("Thread create error");
+  }
   // printf("Called pthread_create\n");
 
   high_entropy = true;
 
-  // printf("Starting Train 2...\n");
+  printf("Starting Train 2...\n");
   /*
   Head SYN
   */
-  s = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port);
+  s = send_syn(sockfd2, servaddr, src_ip, dst_ip, source_port, dest_port);
   if (s != 1){
     perror("Send_syn");
     exit(1);
@@ -429,17 +440,19 @@ int main (int argc, char **argv) {
   /*
   Tail SYN
   */
-  s2 = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port2);
+  s2 = send_syn(sockfd2, servaddr, src_ip, dst_ip, source_port, dest_port2);
   if (s2 < 0){
     perror("Send_syn");
     exit(1);
   }
 
-  pthread_join(recv_thread, NULL);
+  if (pthread_join(recv_thread2, NULL) < 0){
+    perror("Thread create error");
+  }
   // printf("Thread exited and returned: %Lf\n", thrd_data2.rst_delta);
   
   // Close socket descriptor.
-  close (sockfd);
+  close (sockfd2);
 
   /*
   Compare and compute RST deltas
@@ -671,7 +684,7 @@ int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_pac
           exit(1);
       }
   }
-  printf("Sent train!\n");
+  // printf("Sent train!\n");
   return 1;
 }
 
@@ -689,6 +702,8 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
   time_t end;
   int seconds = timeout;
   end = time(NULL) + seconds;
+
+  // printf("Starting rcv while\n");
   
   while(time(NULL) < end){
     ssize_t bytes_received = recvfrom(sockfd, recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr *)&servaddr, &addrlen);
@@ -727,6 +742,8 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
     bzero(recv_buffer, sizeof(recv_buffer));
   }
 
+  // printf("end rcv while\n");
+
 
   // printf("RST Start: sec: %ld usec:%ld\n", rst_start.tv_sec, rst_start.tv_usec);
   // printf("RST End: sec: %ld usec:%ld\n", rst_end.tv_sec, rst_end.tv_usec);
@@ -755,6 +772,9 @@ void* thread_function (void *arg) {
   int timeout = t_data->timeout;
 
   long double result = receive_rst(sockfd, servaddr, source_port, dest_port, dest_port2, timeout);
+  if (result < 0){
+    perror("Recevie rst error");
+  }
 
   t_data->rst_delta = result;
   pthread_exit(NULL);
