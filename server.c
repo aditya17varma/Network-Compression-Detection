@@ -330,8 +330,10 @@ int main(int argc, char** argv) {
                 }
             }
         }
-
-        struct udp_payload *recv_packet = (struct udp_payload *) payload_buffer;
+        /*
+        Uncomment this block to check packet id and payloads!
+        */
+        // struct udp_payload *recv_packet = (struct udp_payload *) payload_buffer;
         // printf("packet payload: %s\n", recv_packet->payload);
         // printf("packet_id: %d\n", recv_packet->packet_id);
         // printf("Data received from Client\n");

@@ -1,7 +1,7 @@
 {
     "Server_IP": "192.168.64.2",
     "Client_IP": "192.168.64.3",
-    "Source_UDP_Port": 3000,
+    "Source_UDP_Port": 5000,
     "Dest_UDP_Port": 8765,
     "Dest_Port_TCP_Head_SYN": 8080,
     "Dest_Port_TCP_Tail_SYN": 8081,
