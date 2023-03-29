@@ -238,8 +238,11 @@ int main(int argc, char** argv) {
     udp_cliaddr.sin_port = htons(udp_source_port);
 
     if (bind(udp_sockfd, (struct sockaddr *)&udp_cliaddr, sizeof(udp_cliaddr)) < 0) {
-        perror("bind failed");
+        perror("UDP bind failed");
         exit(EXIT_FAILURE);
+    }
+    else{
+        printf("UDP Bind successful\n");
     }
 
     
@@ -261,6 +264,7 @@ int main(int argc, char** argv) {
     connfd = connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
     if (connfd == -1) {
         printf("Client connection to server socket failed...\n");
+        printf("%s\n", strerror(errno));
         exit(1);
     }
     else {
