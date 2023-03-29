@@ -76,6 +76,8 @@ The config.json must be properly constructed. client.c and server.c require all 
 ## Implementation Notes
 Currently, the server calls the gettimeofday() function to update the end timestamp for packet but the first. The delta could be potentially reduced if the end time is only updated for the last 10% of packets.
 
+The recvfrom() in thread2 sometimes doesn't timestamp properly, even though it captures the RST.
+
 ## External Resources Used
 P.D. Buchanan's [Sending a IPv4 TCP packet via raw sockets](https://www.pdbuchan.com/rawsock/tcp4.c)<br>
 Used for implementing the checksum and headers in part2.
