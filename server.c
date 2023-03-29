@@ -1,3 +1,6 @@
+/**
+Program to implement server that receives TCP and UDP connections from the client.
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,8 +12,35 @@
 #include <time.h>
 #include <sys/time.h>
 
+/*
+Define some constants.
+*/
 #define MAX 1500
 
+
+/*
+Struct to store data from the config file, used to parse the JSON file. 
+Server_IP and Client_IP are type in_addr_t.
+All other variables as type int.
+*/
+struct config_struct {
+    in_addr_t Server_IP;
+    int Source_UDP_Port;
+    int Dest_UDP_Port;
+    int Dest_Port_TCP_Head_SYN;
+    int Dest_Port_TCP_Tail_SYN;
+    int TCP_Port;
+    int UDP_Payload_Size;
+    int Inter_Measurement_Time;
+    int Number_UDP_Packets;
+    int UDP_TTL;
+};
+
+/*
+Implements pre-probing.
+The server receives the data for the config.json file from the client, and writes it to the server_config.json file.
+Takes the TCP socket descriptor as input.
+*/
 void pre_probing(int sockfd) {
     int num_bytes;
     FILE *fp;
@@ -30,19 +60,10 @@ void pre_probing(int sockfd) {
     return;
 }
 
-struct config_struct {
-    in_addr_t Server_IP;
-    int Source_UDP_Port;
-    int Dest_UDP_Port;
-    int Dest_Port_TCP_Head_SYN;
-    int Dest_Port_TCP_Tail_SYN;
-    int TCP_Port;
-    int UDP_Payload_Size;
-    int Inter_Measurement_Time;
-    int Number_UDP_Packets;
-    int UDP_TTL;
-};
 
+/*
+Uses the cJSON library to parse the config.json file and load the values into a struct config_struct.
+*/
 struct config_struct* parse_JSON() {
 
     struct config_struct *config = malloc(sizeof(struct config_struct));
@@ -70,62 +91,104 @@ struct config_struct* parse_JSON() {
         // printf("Server IP struct: %d\n", config->Server_IP);
     }
     else {
-        printf("Shouldn't get here\n");
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *Source_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Source_UDP_Port");
     if (cJSON_IsNumber(Source_UDP_Port)) {
         config->Source_UDP_Port = Source_UDP_Port->valueint;
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Dest_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Dest_UDP_Port");
     if (cJSON_IsNumber(Dest_UDP_Port)) {
         config->Dest_UDP_Port = Dest_UDP_Port->valueint;
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *Dest_Port_TCP_Head_SYN = cJSON_GetObjectItemCaseSensitive(root, "Dest_Port_TCP_Head_SYN");
     if (cJSON_IsNumber(Dest_Port_TCP_Head_SYN)) {
         config->Dest_Port_TCP_Head_SYN = Dest_Port_TCP_Head_SYN->valueint;
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Dest_Port_TCP_Tail_SYN = cJSON_GetObjectItemCaseSensitive(root, "Dest_Port_TCP_Tail_SYN");
     if (cJSON_IsNumber(Dest_Port_TCP_Tail_SYN)) {
         config->Dest_Port_TCP_Tail_SYN = Dest_Port_TCP_Tail_SYN->valueint;
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *TCP_Port = cJSON_GetObjectItemCaseSensitive(root, "TCP_Port");
     if (cJSON_IsNumber(TCP_Port)) {
         config->TCP_Port = TCP_Port->valueint;
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *UDP_Payload_Size = cJSON_GetObjectItemCaseSensitive(root, "UDP_Payload_Size");
     if (cJSON_IsNumber(UDP_Payload_Size)) {
         config->UDP_Payload_Size = UDP_Payload_Size->valueint;
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Inter_Measurement_Time = cJSON_GetObjectItemCaseSensitive(root, "Inter_Measurement_Time");
     if (cJSON_IsNumber(Inter_Measurement_Time)) {
         config->Inter_Measurement_Time = Inter_Measurement_Time->valueint;
-    }  
+    } 
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    } 
 
     cJSON *Number_UDP_Packets = cJSON_GetObjectItemCaseSensitive(root, "Number_UDP_Packets");
     if (cJSON_IsNumber(Number_UDP_Packets)) {
         config->Number_UDP_Packets = Number_UDP_Packets->valueint;
     }  
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *UDP_TTL = cJSON_GetObjectItemCaseSensitive(root, "UDP_TTL");
     if (cJSON_IsNumber(UDP_TTL)) {
         config->UDP_TTL = UDP_TTL->valueint;
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON_Delete(root);
     return config;
 }
 
+/**
+Implements post-probing.
+Arguments: TCP socket file descriptor, bool for compression detected.
+Based on the value of the bool comp, sends relevant string to the client.
+*/
 void post_probing (int sockfd, bool comp) {
     char *post_string;
     int n;
-    char buffer[MAX];
+    char buffer[1000];
         
     if (comp) {
         post_string = "Compression Detected..\n";
@@ -143,10 +206,16 @@ void post_probing (int sockfd, bool comp) {
     }
 }
 
-
+/*
+Main function
+Accecpts the TCP connection from the client, and saves the data received.
+Uses the pre-probing data to set up the UDP socket and receive UDP packets from the client.
+The time delta for the two UDP trains is used to detect compression on the network path.
+Accepts a TCP connection from the client for post-probing and sends back the compression result.
+*/
 int main(int argc, char** argv) {
      if (argc < 2){
-        perror("Please include the name of the config file");
+        perror("Please include the TCP port number, check config.json\n");
         printf("Usage: ./server <TCP Port>\n");
     }
 
@@ -183,10 +252,7 @@ int main(int argc, char** argv) {
     server_addr.sin_port = htons(tcp_port);
     server_addr.sin_addr.s_addr = INADDR_ANY;
 
-    // char port_buff[MAX];
-    // inet_ntop(AF_INET, &server_addr, port_buff, MAX);
-    // printf("Assigned IP: %s\n", port_buff);
-
+    // Bind TCP port
     bindfd = bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr));
     if (bindfd == -1){
         perror("Server bind failed");
@@ -196,6 +262,7 @@ int main(int argc, char** argv) {
     }
     
 
+    // TCP listen for connections
     if (listen(sockfd, 10) < 0) {
         perror("Server error listening...");
         exit(1);
@@ -205,6 +272,7 @@ int main(int argc, char** argv) {
          printf("Server listening...\n");
     }
 
+    // TCP accept connection from client
     addr_size = sizeof(new_addr);
     new_sock = accept(sockfd, (struct sockaddr*)&new_addr, &addr_size);
     // printf("Server accepted!\n");
@@ -214,9 +282,10 @@ int main(int argc, char** argv) {
     
     // Parse JSON for other info
     struct config_struct *config = parse_JSON();
+    int inter_mes = config->Inter_Measurement_Time;
     // printf("Server sent file successfully!\n");
     printf("Server closing connection..\n");
-    sleep(2);
+    sleep(inter_mes / 2);
     close(sockfd);
 
     int udp_dest_port = config->Dest_UDP_Port;
@@ -224,7 +293,7 @@ int main(int argc, char** argv) {
     int num_packets = config->Number_UDP_Packets;
     int udp_ttl = config->UDP_TTL;
     in_addr_t server_ip = config->Server_IP;
-    int inter_mes = config->Inter_Measurement_Time;
+    
 
 
     // Setup UDP
@@ -253,7 +322,7 @@ int main(int argc, char** argv) {
     // }
     // printf("UDP Server awaiting data...\n");
 
-    // set timeout, tv_sec is timeout in seconds
+    // Set timeout, tv_sec is timeout in seconds
     struct timeval timeout;
     timeout.tv_sec = inter_mes * 0.75;
     timeout.tv_usec = 0;
@@ -329,8 +398,10 @@ int main(int argc, char** argv) {
                 }
             }
         }
-
-        struct udp_payload *recv_packet = (struct udp_payload *) payload_buffer;
+        /*
+        Uncomment this block to check packet id and payloads!
+        */
+        // struct udp_payload *recv_packet = (struct udp_payload *) payload_buffer;
         // printf("packet payload: %s\n", recv_packet->payload);
         // printf("packet_id: %d\n", recv_packet->packet_id);
         // printf("Data received from Client\n");

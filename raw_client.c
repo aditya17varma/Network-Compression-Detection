@@ -1,3 +1,6 @@
+/**
+Raw socket implementation of the client to send SYN packets and UDP trains and caputure RST packets.
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>          
@@ -23,11 +26,15 @@
 
 #include "cJSON.h"
 
-// Define some constants.
+/*
+Define some constants.
+*/
 #define IP4_HDRLEN 20         // IPv4 header length
 #define TCP_HDRLEN 20         // TCP header length, excludes options data
 
-// Function prototypes
+/*
+Function Declarations
+*/
 uint16_t checksum (uint16_t *, int);
 uint16_t tcp4_checksum (struct ip, struct tcphdr);
 char *allocate_strmem (int);
@@ -38,14 +45,18 @@ int setup_raw_tcp_socket(int);
 int setup_udp_socket(int);
 int send_syn(int, struct sockaddr_in, char*, char*, int, int );
 int send_udp_trains(int, struct sockaddr_in, int, int, bool);
-long double receive_rst(int, struct sockaddr_in, int, int, int);
+long double receive_rst(int, struct sockaddr_in, int, int, int, int);
 void* thread_function (void *);
 
-void print_packet(char*);
 
+/*
+Struct to store data from the config file, used to parse the JSON file. 
+Server_IP and Client_IP are type in_addr_t.
+All other variables as type int.
+*/
 struct config_struct {
     in_addr_t Server_IP;
-    in_addr_t Client_IP;
+    char *Client_IP;
     int Source_UDP_Port;
     int Dest_UDP_Port;
     int Dest_Port_TCP_Head_SYN;
@@ -57,6 +68,10 @@ struct config_struct {
     int UDP_TTL;
 };
 
+/*
+Struct to pass information to the thread responsible for recvfrom() function.
+Result from the recvfrom() thread is stored in the rst_delta variable.
+*/
 struct thread_data {
     int sockfd;
     struct sockaddr_in servaddr;
@@ -64,8 +79,12 @@ struct thread_data {
     int dest_port;
     int dest_port2;
     long double rst_delta;
+    int timeout;
 };
 
+/*
+Uses the cJSON library to parse the config.json file and load the values into a struct config_struct.
+*/
 struct config_struct* parse_JSON(char *filename) {
 
     struct config_struct *config = malloc(sizeof(struct config_struct));
@@ -89,18 +108,19 @@ struct config_struct* parse_JSON(char *filename) {
 
     cJSON *Server_IP = cJSON_GetObjectItem(root, "Server_IP");
     if (cJSON_IsString(Server_IP)) {
+        // printf("Server_IP: %s\n", Server_IP->valuestring);
         config->Server_IP = inet_addr(Server_IP->valuestring);
         // printf("Server IP struct: %d\n", config->Server_IP);
     }
     else {
-        printf("Shouldn't get here\n");
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *Client_IP = cJSON_GetObjectItem(root, "Client_IP");
     if (cJSON_IsString(Client_IP)) {
-        // printf("Client IP: %s\n", Client_IP->valuestring);
-        config->Client_IP = inet_addr(Client_IP->valuestring);
-        // printf("Client IP struct: %d\n", config->Client_IP);
+        config->Client_IP = strdup(cJSON_GetStringValue(Client_IP));
+        // printf("Client IP struct: %s\n", config->Client_IP);
     }
 
     cJSON *Source_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Source_UDP_Port");
@@ -108,11 +128,19 @@ struct config_struct* parse_JSON(char *filename) {
         config->Source_UDP_Port = Source_UDP_Port->valueint;
         // printf("Source_UDP_Port: %d\n", config.Source_UDP_Port);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Dest_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Dest_UDP_Port");
     if (cJSON_IsNumber(Dest_UDP_Port)) {
         config->Dest_UDP_Port = Dest_UDP_Port->valueint;
         // printf("Dest_UDP_Port: %d\n", config.Dest_UDP_Port);
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *Dest_Port_TCP_Head_SYN = cJSON_GetObjectItemCaseSensitive(root, "Dest_Port_TCP_Head_SYN");
@@ -120,11 +148,19 @@ struct config_struct* parse_JSON(char *filename) {
         config->Dest_Port_TCP_Head_SYN = Dest_Port_TCP_Head_SYN->valueint;
         // printf("Dest_Port_TCP_Head_SYN: %d\n", config.Dest_Port_TCP_Head_SYN);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Dest_Port_TCP_Tail_SYN = cJSON_GetObjectItemCaseSensitive(root, "Dest_Port_TCP_Tail_SYN");
     if (cJSON_IsNumber(Dest_Port_TCP_Tail_SYN)) {
         config->Dest_Port_TCP_Tail_SYN = Dest_Port_TCP_Tail_SYN->valueint;
         // printf("Dest_Port_TCP_Tail_SYN: %d\n", config.Dest_Port_TCP_Tail_SYN);
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *TCP_Port = cJSON_GetObjectItemCaseSensitive(root, "TCP_Port");
@@ -132,23 +168,39 @@ struct config_struct* parse_JSON(char *filename) {
         config->TCP_Port = TCP_Port->valueint;
         // printf("TCP_Port: %d\n", config.TCP_Port);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *UDP_Payload_Size = cJSON_GetObjectItemCaseSensitive(root, "UDP_Payload_Size");
     if (cJSON_IsNumber(UDP_Payload_Size)) {
         config->UDP_Payload_Size = UDP_Payload_Size->valueint;
         // printf("UDP_Payload_Size: %d\n", config.UDP_Payload_Size);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Inter_Measurement_Time = cJSON_GetObjectItemCaseSensitive(root, "Inter_Measurement_Time");
     if (cJSON_IsNumber(Inter_Measurement_Time)) {
         config->Inter_Measurement_Time = Inter_Measurement_Time->valueint;
         // printf("Inter_Measuerment_Time: %d\n", config.Inter_Measurement_Time);
-    }  
+    } 
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    } 
 
     cJSON *Number_UDP_Packets = cJSON_GetObjectItemCaseSensitive(root, "Number_UDP_Packets");
     if (cJSON_IsNumber(Number_UDP_Packets)) {
         config->Number_UDP_Packets = Number_UDP_Packets->valueint;
         // printf("Number_UDP_Packets: %d\n", config.Number_UDP_Packets);
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }  
 
     cJSON *UDP_TTL = cJSON_GetObjectItemCaseSensitive(root, "UDP_TTL");
@@ -156,15 +208,31 @@ struct config_struct* parse_JSON(char *filename) {
         config->UDP_TTL = UDP_TTL->valueint;
         // printf("UDP_TTL: %d\n", config.UDP_TTL);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON_Delete(root);
     return config;
 }
 
 
+/*
+Main function
+Parses the config file name from the commmand line argument.
+Sets up the TCP Raw Socket and UDP socket and sockaddr_in structs for each.
+A multi-threaded approach is used to send and receive packets simulataneously as per project specs.
+The main thread is used for sending packets.
+A pthread is created and used for receving packets while the main thread works.
+Pthread starts before packets are sent from the main thread.
+Raw socket used to send the TCP Head packet.
+UDP socket used to send packet train (low entropy).
+Raw socket used to send the TCP Tail packet.
+Repeated again with high entropy data.
+The difference in the deltas of the RST packets is computed.
+*/
 int main (int argc, char **argv) {
-  // CHANGE SRC_IP HARDCODE, MAYBE PUT INTO CONFIG FILE
-
   if (argc < 2){
     perror("Please include the name of the config file");
     printf("Usage: ./raw_client <config.json>\n");
@@ -175,94 +243,137 @@ int main (int argc, char **argv) {
   int status, sockfd, udp_sockfd;
   char *src_ip, *dst_ip;
 
-  struct sockaddr_in *ipv4, servaddr, udp_servaddr;
+  struct sockaddr_in *ipv4, servaddr, udp_servaddr, udp_cliaddr;
   struct ifreq ifr;
   void *tmp;
 
-  // LOAD CONFIG DATA
+  /*
+  Load config.json data
+  */
   struct config_struct *config = parse_JSON(argv[1]);
   in_addr_t server_ip = config->Server_IP;
-  in_addr_t client_ip = config->Client_IP;
+  char* client_ip = (config->Client_IP);
+  // printf("%s\n", config->Client_IP);
+
   int tcp_port = config->TCP_Port;
   int udp_dest_port = config->Dest_UDP_Port;
+  int source_udp_port = config->Source_UDP_Port;
+
   int payload_size = config->UDP_Payload_Size;
   int num_packets = config->Number_UDP_Packets;
   int udp_ttl = config->UDP_TTL;
   int inter_mes = config->Inter_Measurement_Time;
+
   int tcp_head = config->Dest_Port_TCP_Head_SYN;
   int tcp_tail = config->Dest_Port_TCP_Tail_SYN;
-  int source_udp_port = config->Source_UDP_Port;
-
 
   int source_port = tcp_port;
   int dest_port = tcp_head;
   int dest_port2 = tcp_tail;
   int recvfrom_timeout = inter_mes * 0.75;
 
+  /*
+  Create pthread
+  */
   pthread_t recv_thread;
 
   struct in_addr dest_addr;
+  memset (&dest_addr, 0, sizeof (struct in_addr));
   dest_addr.s_addr = server_ip;
-  struct in_addr src_addr;
-  src_addr.s_addr = client_ip;
-  dst_ip = inet_ntoa(dest_addr);
-  src_ip = inet_ntoa(src_addr);
 
-  //RAW SERVADDR
+  dst_ip = inet_ntoa(dest_addr);
+  // printf("dst_ip: %s check: %d\n", dst_ip, inet_addr("192.168.64.2"));
+  src_ip = client_ip;
+  // printf("src_ip: %s check: %d\n", src_ip, inet_addr("192.168.64.3"));
+  
+
+  /*
+  TCP and UDP sockets and sockaddr_in initialized
+  */
   memset (&servaddr, 0, sizeof (struct sockaddr_in));
   servaddr.sin_family = AF_INET;
   servaddr.sin_addr.s_addr = inet_addr(dst_ip);
+  // printf("Servaddr dest: %d\n", servaddr.sin_addr.s_addr);
 
-  // UDP SERVADDR
-  // assign UDP IP, PORT
   memset(&udp_servaddr, 0, sizeof(udp_servaddr));
   udp_servaddr.sin_family = AF_INET;
   udp_servaddr.sin_addr.s_addr = inet_addr(dst_ip);
-  udp_servaddr.sin_port = htons(source_udp_port);
+  udp_servaddr.sin_port = htons(udp_dest_port);
   // printf("Client UDP IP: %d\n", server_ip);
-  printf("Sockaddr set up for TCP and UDP.\n");
+  // printf("Sockaddr set up for TCP and UDP.\n");
 
   printf("Setting up TCP and UDP sockets...\n");
   sockfd = setup_raw_tcp_socket(recvfrom_timeout);
   udp_sockfd = setup_udp_socket(udp_ttl);
 
-  //START RECVFROM THREAD
-  //create struct to pass info to thread
+  /*
+  Bind UDP port to source port
+  */
+  memset(&udp_cliaddr, 0, sizeof(udp_cliaddr));
+  udp_cliaddr.sin_family = AF_INET;
+  udp_cliaddr.sin_addr.s_addr = INADDR_ANY;
+  udp_cliaddr.sin_port = htons(source_udp_port);
+
+  if (bind(udp_sockfd, (struct sockaddr *)&udp_cliaddr, sizeof(udp_cliaddr)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+
+  /*
+  Start the pthread for recvfrom()
+  Create struct to pass data to thread
+  */
+  
   struct thread_data thrd_data = {
     .sockfd = sockfd,
     .servaddr = servaddr,
     .source_port = source_port,
     .dest_port = dest_port,
-    .dest_port2 = dest_port2
+    .dest_port2 = dest_port2,
+    .timeout = inter_mes * 0.75
   };
 
-  // TRAIN 1
+  /*
+  Train 1
+  */
   printf("Sending Trains...\n");
   pthread_create(&recv_thread, NULL, thread_function , (void *)&thrd_data);
   // printf("Called pthread_create\n");
 
   bool high_entropy = false;
 
-  // printf("Starting Train 1...\n");
-  //HEAD SYN
+  printf("Starting Train 1...\n");
+  /*
+  Head SYN
+  */
   int s = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port);
   if (s < 0){
     perror("Send_syn");
+    exit(1);
   }
 
-  // UDP TRAINS choo choo
+  /*
+  UDP Train 1
+  */
   int u1 = send_udp_trains(udp_sockfd, udp_servaddr, num_packets, payload_size, high_entropy);
   if (u1 < 0){
     perror("Send UDP Train error...");
     exit(1);
   }
+  // else {
+  //   printf("Train 1 sent...\n");
+  // }
 
   close(udp_sockfd);
 
-  //TAIL SYN
+  /*
+  Tail SYN
+  */
   int s2 = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port2);
   if (s2 < 0){
     perror("Send_syn");
+    exit(1);
   }
 
   pthread_join(recv_thread, NULL);
@@ -270,14 +381,16 @@ int main (int argc, char **argv) {
   // Close socket descriptor.
   close (sockfd);
 
+  // printf("Sleeping...%d\n", inter_mes);
   sleep(inter_mes);
+  // printf("Awake...\n");
 
-  //TRAIN 2
+  /*
+  Train 2
+  */
   sockfd = setup_raw_tcp_socket(recvfrom_timeout);
   udp_sockfd = setup_udp_socket(udp_ttl);
 
-  //START RECVFROM THREAD
-  //create struct to pass info to thread
   struct thread_data thrd_data2 = {
     .sockfd = sockfd,
     .servaddr = servaddr,
@@ -293,13 +406,18 @@ int main (int argc, char **argv) {
   high_entropy = true;
 
   // printf("Starting Train 2...\n");
-  //HEAD SYN
+  /*
+  Head SYN
+  */
   s = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port);
   if (s != 1){
     perror("Send_syn");
+    exit(1);
   }
 
-  // UDP TRAINS choo choo
+  /*
+  UDP Train 2
+  */
   int u2 = send_udp_trains(udp_sockfd, udp_servaddr, num_packets, payload_size, high_entropy);
   if (u2 < 0){
     perror("Send UDP Train error...");
@@ -308,10 +426,13 @@ int main (int argc, char **argv) {
 
   close(udp_sockfd);
 
-  //TAIL SYN
+  /*
+  Tail SYN
+  */
   s2 = send_syn(sockfd, servaddr, src_ip, dst_ip, source_port, dest_port2);
   if (s2 < 0){
     perror("Send_syn");
+    exit(1);
   }
 
   pthread_join(recv_thread, NULL);
@@ -320,6 +441,9 @@ int main (int argc, char **argv) {
   // Close socket descriptor.
   close (sockfd);
 
+  /*
+  Compare and compute RST deltas
+  */
   printf("RST Delta for Train1: %Lf\n", thrd_data.rst_delta);
   printf("RST Delta for Train2: %Lf\n", thrd_data2.rst_delta);
   double total_delta = abs(thrd_data2.rst_delta - thrd_data.rst_delta);
@@ -334,6 +458,11 @@ int main (int argc, char **argv) {
   return (EXIT_SUCCESS);
 }
 
+/*
+Create the Raw socket and initialize the socket file descriptor, sets timeout value for the socket using setsockopt().
+Arguments: timeout value for the recvfrom().
+Returns the socket file descriptor.
+*/
 int setup_raw_tcp_socket(int recv_timeout) {
   
   int sockfd;
@@ -346,7 +475,9 @@ int setup_raw_tcp_socket(int recv_timeout) {
   //   printf("TCP Socket created\n");
   // }
 
-  // Set flag so socket expects us to provide IPv4 header.
+  /*
+  Set flag so socket expects us to provide IPv4 header.
+  */
   const int on = 1;
   if (setsockopt (sockfd, IPPROTO_IP, IP_HDRINCL, &on, sizeof (on)) < 0) {
     perror ("setsockopt() failed to set IP_HDRINCL ");
@@ -360,14 +491,19 @@ int setup_raw_tcp_socket(int recv_timeout) {
     perror("Couldn't set RCV Timeout");
     exit(1);
   }
-  // else {
-  //   printf("Recvfrom timeout set to: %ld\n", timeout.tv_sec);
-  // }
+  else {
+    printf("Recvfrom timeout set to: %ld\n", timeout.tv_sec);
+  }
 
   return sockfd;
 
 }
 
+/*
+Create the UDP socket and intialize the socket file descriptor. Sets the UDP packet TtL and DF flag using setsockopt().
+Arguments: UDP packet ttl.
+Returns the socket file descriptor.
+*/
 int setup_udp_socket(int udp_ttl){
   int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
   if (udp_sockfd < 0) {
@@ -386,12 +522,20 @@ int setup_udp_socket(int udp_ttl){
 
   if (setsockopt(udp_sockfd, IPPROTO_IP, IP_TTL, &udp_ttl, sizeof(udp_ttl)) < 0){
     perror("UDP setsockopt TTL failed");
+    exit(1);
   }
 
   return udp_sockfd;
 
 }
 
+/*
+Sends SYN packets using the socket file descriptor, sockaddr_in, souce & destination ip addresses and port values.
+Initializes the structs for the IP header and TCP header.
+Calls the checksum function for both the headers.
+Uses sendto() to send the SYN packet from the source port to the destination port.
+Return 1 on success.
+*/
 int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* dest_ip, int source_port, int dest_port) {
   struct ip iphdr;
   struct tcphdr tcphdr;
@@ -402,7 +546,9 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
   tcp_flags = allocate_intmem (8);
   packet = allocate_ustrmem (IP_MAXPACKET);
   
-  // IPv4 header
+  /*
+  Initialize the IPv4 header
+  */
   iphdr.ip_hl = IP4_HDRLEN / sizeof (uint32_t); // IPv4 header length (4 bits): Number of 32-bit words in header = 5
   iphdr.ip_v = 4; // IPv4 (4 bits)
   iphdr.ip_tos = 0; // Type of service (8 bits)
@@ -436,7 +582,9 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
   iphdr.ip_sum = 0;
   iphdr.ip_sum = checksum ((uint16_t *) &iphdr, IP4_HDRLEN);
 
-  // TCP header
+  /*
+  Initialize the TCP header
+  */
   tcphdr.th_sport = htons (source_port); // Source port number (16 bits)
   tcphdr.th_dport = htons (dest_port); // Destination port number (16 bits)
   tcphdr.th_seq = htonl (0); // Sequence number (32 bits)
@@ -460,14 +608,18 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
   tcphdr.th_urp = htons (0); // Urgent pointer (16 bits): 0 (only valid if URG flag is set)
   tcphdr.th_sum = tcp4_checksum (iphdr, tcphdr); // TCP checksum (16 bits)
 
-  // Prepare packet.
+  /*
+  Copy the IP and TCP headers into packet buffer.
+  */ 
   // First part is an IPv4 header.
   memcpy (packet, &iphdr, IP4_HDRLEN * sizeof (uint8_t));
 
-  // Next part of packet is upper layer protocol header.
+  // Next part of packet is the TCP header.
   memcpy ((packet + IP4_HDRLEN), &tcphdr, TCP_HDRLEN * sizeof (uint8_t));
 
-  // SEND PACKET
+  /*
+  Send Packet
+  */
   if (sendto (sockfd, packet, IP4_HDRLEN + TCP_HDRLEN, 0, (struct sockaddr *) &servaddr, sizeof (struct sockaddr)) < 0)  {
     perror ("sendto() failed ");
     exit (EXIT_FAILURE);
@@ -480,6 +632,14 @@ int send_syn(int sockfd, struct sockaddr_in servaddr, char* source_ip, char* des
   return 1;
 }
 
+/*
+Sends the UDP packet trains to the destination IP and Port.
+Arguments: socket file descriptor, sockaddr_in, number of UDP packets, UDP payload size, boolean to assign high entropy data.
+Uses the udp_payload struct to simplify assignment of payload data and packet id.
+High-entropy data loaded from the random-file.txt, which was compiled on a local machine using /dev/urandom.
+If true passed in for the bool high_entropy, payload is high entropy, otherwise zero'd out.
+Returns 1 on success.
+*/
 int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_packets, int payload_size, bool high_entropy) {
   // get high-entropy data ready
   struct udp_payload{
@@ -487,40 +647,54 @@ int send_udp_trains(int udp_sockfd, struct sockaddr_in udp_servaddr, int num_pac
       char payload[payload_size - 2];
   };
   struct udp_payload udp_packet;
-  FILE *random_fp = fopen("../random_file.txt", "r");
+  FILE *random_fp = fopen("random_file.txt", "r");
   char rand_buffer[payload_size];
   // printf("Trying to fgets random file\n");
   fgets(rand_buffer, sizeof(rand_buffer), random_fp);
   // printf("Rand array filled\n");
+  memset(udp_packet.payload, 0, payload_size -2);
+  if (high_entropy){
+    strncpy(udp_packet.payload, rand_buffer, payload_size - 2);
+  }
 
   for (int i = 0; i < num_packets; i++){
-      // set packet id
+      /*
+      set packet id
+      */
       udp_packet.packet_id = (unsigned short)i;
-      // clear packet payload
-      memset(udp_packet.payload, 0, payload_size -2);
-      if (high_entropy){
-        strncpy(udp_packet.payload, rand_buffer, payload_size - 2);
-      }
+      /*
+      Send the UDP packet.
+      */
       if (sendto(udp_sockfd, &udp_packet, sizeof(udp_packet), 0, (struct sockaddr*)&udp_servaddr, sizeof(udp_servaddr)) == -1) {
           perror("UDP Sendto error");
           printf("%s\n", strerror(errno));
+          exit(1);
       }
   }
-  // printf("Sent train!\n");
+  printf("Sent train!\n");
   return 1;
 }
 
-long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port, int dest_port, int dest_port2) {
+/*
+Captures incoming packets source IP address.
+Checks the RST flag to identify the RST packets and set the timestamp.
+Returns the difference in time (milliseconds) between the capure of the first RST packet and second RST packet.
+*/
+long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port, int dest_port, int dest_port2, int timeout) {
   socklen_t addrlen = sizeof(servaddr);
   char recv_buffer[1500];
   struct timeval rst_start, rst_end;
   bool first_rst_captured = false;
+  bool second_rst_captured = false;
+  time_t end;
+  int seconds = timeout;
+  end = time(NULL) + seconds;
   
-  while(1){
+  while(time(NULL) < end){
     ssize_t bytes_received = recvfrom(sockfd, recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr *)&servaddr, &addrlen);
     if (bytes_received < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK){
-        // printf("RECV timeout\n");
+        printf("RECV timeout\n");
         break;
       }
       else {
@@ -545,12 +719,14 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
       else {
         // printf("Found second RST\n");
         gettimeofday(&rst_end, NULL);
+        second_rst_captured = true;
         break;
       }
     }
     
     bzero(recv_buffer, sizeof(recv_buffer));
   }
+
 
   // printf("RST Start: sec: %ld usec:%ld\n", rst_start.tv_sec, rst_start.tv_usec);
   // printf("RST End: sec: %ld usec:%ld\n", rst_end.tv_sec, rst_end.tv_usec);
@@ -560,9 +736,13 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
   // printf("uSec_diff: %Lf\n", usec_diff);
   long double rst_delta = ((rst_end.tv_sec - rst_start.tv_sec) * 1000 + (rst_end.tv_usec - rst_start.tv_usec) / 1000) ;
   return rst_delta;
-
 }
 
+/*
+Function to pass into the pthread. Calls the receive_rst() function with the data passed into the thread function.
+Loads the void* argument in to the struct thread_data.
+Updates the rst_delta variable with the result from the receive_rst() function.
+*/
 void* thread_function (void *arg) {
   struct thread_data *t_data = (struct thread_data *) arg;
   // printf("Check Thread source_port: %d\n", t_data->source_port);
@@ -572,14 +752,18 @@ void* thread_function (void *arg) {
   int source_port = t_data->source_port;
   int dest_port = t_data->dest_port;
   int dest_port2 = t_data->dest_port2;
+  int timeout = t_data->timeout;
 
-  long double result = receive_rst(sockfd, servaddr, source_port, dest_port, dest_port2);
+  long double result = receive_rst(sockfd, servaddr, source_port, dest_port, dest_port2, timeout);
 
   t_data->rst_delta = result;
   pthread_exit(NULL);
   // return (void *)rst_delta;
 }
 
+/*
+Checksum for the IP and TCP headers.
+*/
 uint16_t
 checksum (uint16_t *addr, int len) {
 
