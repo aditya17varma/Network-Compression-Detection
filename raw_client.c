@@ -705,7 +705,7 @@ long double receive_rst(int sockfd, struct sockaddr_in servaddr, int source_port
 
   // printf("Starting rcv while\n");
   
-  while(time(NULL) < end){
+  while(1){
     ssize_t bytes_received = recvfrom(sockfd, recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr *)&servaddr, &addrlen);
     if (bytes_received < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK){
