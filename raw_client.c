@@ -1,3 +1,6 @@
+/**
+Raw socket implementation of the client to send SYN packets and UDP trains and caputure RST packets.
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>          

@@ -1,3 +1,6 @@
+/**
+Program to implement the client to initiate TCP connections and send UDP trains to the server.
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
