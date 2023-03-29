@@ -66,11 +66,19 @@ struct config_struct* parse_JSON(char* filename) {
         config->Server_IP = inet_addr(Server_IP->valuestring);
         // printf("Server IP struct: %d\n", config->Server_IP);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Source_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Source_UDP_Port");
     if (cJSON_IsNumber(Source_UDP_Port)) {
         config->Source_UDP_Port = Source_UDP_Port->valueint;
         // printf("Source_UDP_Port: %d\n", config.Source_UDP_Port);
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *Dest_UDP_Port = cJSON_GetObjectItemCaseSensitive(root, "Dest_UDP_Port");
@@ -78,11 +86,19 @@ struct config_struct* parse_JSON(char* filename) {
         config->Dest_UDP_Port = Dest_UDP_Port->valueint;
         // printf("Dest_UDP_Port: %d\n", config.Dest_UDP_Port);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Dest_Port_TCP_Head_SYN = cJSON_GetObjectItemCaseSensitive(root, "Dest_Port_TCP_Head_SYN");
     if (cJSON_IsNumber(Dest_Port_TCP_Head_SYN)) {
         config->Dest_Port_TCP_Head_SYN = Dest_Port_TCP_Head_SYN->valueint;
         // printf("Dest_Port_TCP_Head_SYN: %d\n", config.Dest_Port_TCP_Head_SYN);
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *Dest_Port_TCP_Tail_SYN = cJSON_GetObjectItemCaseSensitive(root, "Dest_Port_TCP_Tail_SYN");
@@ -90,11 +106,19 @@ struct config_struct* parse_JSON(char* filename) {
         config->Dest_Port_TCP_Tail_SYN = Dest_Port_TCP_Tail_SYN->valueint;
         // printf("Dest_Port_TCP_Tail_SYN: %d\n", config.Dest_Port_TCP_Tail_SYN);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *TCP_Port = cJSON_GetObjectItemCaseSensitive(root, "TCP_Port");
     if (cJSON_IsNumber(TCP_Port)) {
         config->TCP_Port = TCP_Port->valueint;
         // printf("TCP_Port: %d\n", config.TCP_Port);
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON *UDP_Payload_Size = cJSON_GetObjectItemCaseSensitive(root, "UDP_Payload_Size");
@@ -102,23 +126,39 @@ struct config_struct* parse_JSON(char* filename) {
         config->UDP_Payload_Size = UDP_Payload_Size->valueint;
         // printf("UDP_Payload_Size: %d\n", config.UDP_Payload_Size);
     }
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Inter_Measurement_Time = cJSON_GetObjectItemCaseSensitive(root, "Inter_Measurement_Time");
     if (cJSON_IsNumber(Inter_Measurement_Time)) {
         config->Inter_Measurement_Time = Inter_Measurement_Time->valueint;
         // printf("Inter_Measuerment_Time: %d\n", config.Inter_Measurement_Time);
     }  
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *Number_UDP_Packets = cJSON_GetObjectItemCaseSensitive(root, "Number_UDP_Packets");
     if (cJSON_IsNumber(Number_UDP_Packets)) {
         config->Number_UDP_Packets = Number_UDP_Packets->valueint;
         // printf("Number_UDP_Packets: %d\n", config.Number_UDP_Packets);
     }  
+    else {
+        perror("Config File Key error.");
+        exit(1);
+    }
 
     cJSON *UDP_TTL = cJSON_GetObjectItemCaseSensitive(root, "UDP_TTL");
     if (cJSON_IsNumber(UDP_TTL)) {
         config->UDP_TTL = UDP_TTL->valueint;
         // printf("UDP_TTL: %d\n", config.UDP_TTL);
+    }
+    else {
+        perror("Config File Key error.");
+        exit(1);
     }
 
     cJSON_Delete(root);
