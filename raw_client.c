@@ -317,7 +317,7 @@ int main (int argc, char **argv) {
   if (bind(udp_sockfd, (struct sockaddr *)&udp_cliaddr, sizeof(udp_cliaddr)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
-    }
+  }
 
 
   /*
@@ -394,6 +394,11 @@ int main (int argc, char **argv) {
   */
   int sockfd2 = setup_raw_tcp_socket(recvfrom_timeout);
   udp_sockfd = setup_udp_socket(udp_ttl);
+
+  if (bind(udp_sockfd, (struct sockaddr *)&udp_cliaddr, sizeof(udp_cliaddr)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+  }
 
   memset (&servaddr, 0, sizeof (struct sockaddr_in));
   servaddr.sin_family = AF_INET;
